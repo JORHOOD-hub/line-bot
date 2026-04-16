@@ -20,7 +20,8 @@ COPY . .
 # 必要なディレクトリを作成
 RUN mkdir -p /app/data /app/output /app/templates
 
-# ポート公開
+# ポート設定
+ENV PORT=5000
 EXPOSE 5000
 
 # ヘルスチェック
