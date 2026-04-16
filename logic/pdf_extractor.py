@@ -89,11 +89,12 @@ class PDFExtractor:
             r'土地面積[：:]?\s*([\d.]+)',
             r'地積[：:]?\s*([\d.]+)',
             r'売却希望面積[：:]?\s*([\d.]+)',
-            # 「面積 283.67㎡」というフォーマット（「1階面積」「2階面積」は除外）
-            r'(?<!階)\s*面積\s+([\d.]+)\s*㎡'
+            # 「面積 283.67㎡」というフォーマット（行の最初の「面積」のみ）
+            # 「延床面積」「1階面積」などは除外
+            r'(?:^|\n)\s*面積\s+([\d.]+)\s*㎡'
         ]
         for pattern in patterns:
-            match = re.search(pattern, text)
+            match = re.search(pattern, text, re.MULTILINE)
             if match:
                 try:
                     return float(match.group(1))
