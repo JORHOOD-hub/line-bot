@@ -6,7 +6,7 @@ from flask import Flask, request, abort, send_file
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import (
-    MessageEvent, TextMessage, TextSendMessage, FileMessage
+    MessageEvent, TextMessage, TextSendMessage, FileMessage, FileSendMessage
 )
 import tempfile
 from pathlib import Path
@@ -138,7 +138,7 @@ def get_pdf(user_id):
 def send_pdf_to_user(user_id: str, pdf_path: str):
     """
     生成したPDFをLINEユーザーに送信
-    Flask エンドポイント経由でダウンロードリンクを生成して送信
+    FileSendMessage で PDF ファイルとして送信
     """
     try:
         pdf_path = Path(pdf_path)
@@ -148,19 +148,22 @@ def send_pdf_to_user(user_id: str, pdf_path: str):
 
         logger.info(f"PDF ready for {user_id}: {pdf_path}")
 
-        # ダウンロードリンクを生成
+        # ダウンロードURLを生成
         base_url = os.getenv('BASE_URL', 'https://line-bot-production-2689.up.railway.app')
         download_url = f"{base_url}/pdf/{user_id}"
 
-        logger.info(f"Sending download link to {user_id}: {download_url}")
+        # ファイルサイズを取得
+        file_size = pdf_path.stat().st_size
 
-        # ダウンロードリンク付きメッセージを送信
+        logger.info(f"Sending PDF file to {user_id}: {download_url} (size: {file_size})")
+
+        # FileSendMessage でPDFファイルを送信
         line_bot_api.push_message(
             user_id,
-            TextSendMessage(
-                text=f'📄 買付証明書が完成しました！\n\n'
-                     f'以下のリンクからダウンロードしてください：\n\n'
-                     f'{download_url}'
+            FileSendMessage(
+                originalContentUrl=download_url,
+                fileName='買付証明書.pdf',
+                fileSize=file_size
             )
         )
 
