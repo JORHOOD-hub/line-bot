@@ -35,6 +35,10 @@ class PDFExtractor:
                 for page in pdf.pages:
                     text += page.extract_text() or ""
 
+                # デバッグ：抽出されたテキストをログ出力
+                print(f"DEBUG: Extracted text length: {len(text)} characters")
+                print(f"DEBUG: First 500 chars: {text[:500]}")
+
                 # 物件名、所在地などを抽出
                 extracted_data['property_name'] = self._extract_property_name(text)
                 extracted_data['location'] = self._extract_location(text)
