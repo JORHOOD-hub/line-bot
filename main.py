@@ -2,7 +2,7 @@
 import os
 import json
 import logging
-from flask import Flask, request, abort
+from flask import Flask, request, abort, send_file
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import (
@@ -112,13 +112,33 @@ def health_check():
     return {'status': 'ok'}, 200
 
 
+@app.route('/pdf/<user_id>', methods=['GET'])
+def get_pdf(user_id):
+    """生成したPDFをダウンロード"""
+    output_dir = Path(config.OUTPUT_DIR)
+    pdf_path = output_dir / f"{user_id}_certificate.pdf"
+
+    if not pdf_path.exists():
+        logger.warning(f"PDF not found for user {user_id}: {pdf_path}")
+        return {'error': 'PDF not found'}, 404
+
+    try:
+        logger.info(f"Sending PDF to {user_id}: {pdf_path}")
+        return send_file(
+            str(pdf_path),
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f"{user_id}_certificate.pdf"
+        )
+    except Exception as e:
+        logger.error(f"Error sending PDF: {e}", exc_info=True)
+        return {'error': 'Failed to send PDF'}, 500
+
+
 def send_pdf_to_user(user_id: str, pdf_path: str):
     """
     生成したPDFをLINEユーザーに送信
-    ※ Note: Line Messaging API では push_message で直接バイナリを送信できないため、
-    実装上の制限あり。実運用では以下の方法を検討：
-    1. CloudStorageで一時ホスト + FileSendMessage（URL指定）
-    2. ユーザーがダウンロードリンクをクリック
+    Flask エンドポイント経由でダウンロードリンクを生成して送信
     """
     try:
         pdf_path = Path(pdf_path)
@@ -128,16 +148,20 @@ def send_pdf_to_user(user_id: str, pdf_path: str):
 
         logger.info(f"PDF ready for {user_id}: {pdf_path}")
 
-        # TODO: Line Messaging API の制限により、以下の実装が必要
-        # - CloudStorage (GCS/S3) に PDF をアップロード
-        # - 署名付き URL を生成
-        # - FileSendMessage で URL を指定
+        # ダウンロードリンクを生成
+        base_url = os.getenv('BASE_URL', 'https://line-bot-production-2689.up.railway.app')
+        download_url = f"{base_url}/pdf/{user_id}"
 
-        # 暫定実装：ユーザーがファイルピッカーから取得できるように
-        # log してて通知のみ
+        logger.info(f"Sending download link to {user_id}: {download_url}")
+
+        # ダウンロードリンク付きメッセージを送信
         line_bot_api.push_message(
             user_id,
-            TextSendMessage(text='📄 買付証明書が完成しました！\n\nクライアント側で /output/ フォルダから取得してください。')
+            TextSendMessage(
+                text=f'📄 買付証明書が完成しました！\n\n'
+                     f'以下のリンクからダウンロードしてください：\n\n'
+                     f'{download_url}'
+            )
         )
 
     except Exception as e:
