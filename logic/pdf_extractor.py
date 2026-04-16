@@ -73,14 +73,14 @@ class PDFExtractor:
 
     def _extract_location(self, text: str) -> Optional[str]:
         """所在地を抽出"""
-        # 「所在地」の後の文字列を抽出（「地」の部分が含まれないように）
-        match = re.search(r'所在地[：:]?\s*([^\n]+)', text)
+        # 「所在地」の後の文字列を抽出
+        match = re.search(r'所在地[：:]?\s*(.+?)(?:\n|$)', text)
         if match:
             location = match.group(1).strip()
-            # 最初の「地 」を削除
-            if location.startswith('地 '):
-                location = location[2:].strip()
-            return location
+            # 最初の「地 」「在地 」を削除
+            location = re.sub(r'^[地在地]+\s*', '', location).strip()
+            if location:
+                return location
         return None
 
     def _extract_land_area(self, text: str) -> Optional[float]:
