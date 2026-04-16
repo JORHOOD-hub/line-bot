@@ -1,5 +1,6 @@
 import re
 import os
+import logging
 from typing import Optional
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -9,6 +10,8 @@ from logic.pdf_generator import PDFGenerator
 from utils.config import config
 from utils.date_utils import parse_price_input
 from handlers.修正_handler import handle_修正指示
+
+logger = logging.getLogger(__name__)
 
 def handle_message(user_id: str, text: str) -> tuple:
     """
@@ -244,18 +247,18 @@ def generate_certificate_pdf(user_id: str) -> Optional[str]:
         pdf_path = output_dir / f"{user_id}_certificate.pdf"
 
         # Step 1: Excel 書き込み
-        print(f"[DEBUG] Step 1: Writing Excel for user {user_id}")
+        logger.info(f"Step 1: Writing Excel for user {user_id}")
         writer = ExcelWriter(config.EXCEL_TEMPLATE_PATH, str(xlsm_path))
         if not writer.write_data(generate_data):
             raise Exception("Excel書き込みに失敗しました")
-        print(f"[DEBUG] Step 1: Excel written successfully")
+        logger.info(f"Step 1: Excel written successfully")
 
         # Step 2: PDF 生成（社印入り）
-        print(f"[DEBUG] Step 2: Generating PDF for user {user_id}")
+        logger.info(f"Step 2: Generating PDF for user {user_id}")
         generator = PDFGenerator(str(xlsm_path), str(pdf_path))
         if not generator.generate_with_seal():
             raise Exception("PDF生成に失敗しました")
-        print(f"[DEBUG] Step 2: PDF generated successfully")
+        logger.info(f"Step 2: PDF generated successfully")
 
         # Step 3: ユーザー状態を更新
         user_state.state = 'completed'
