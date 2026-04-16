@@ -5,12 +5,22 @@ def parse_price_input(text: str) -> Optional[int]:
     """
     テキスト入力から購入価格を抽出
     対応形式：
+    - 1億円、1.2億、1.2億円
     - 1000万円
     - 100,000,000
     - 100000000
     - 1千万円
     """
     text = text.strip()
+
+    # 億円 形式: "1億円" "1.2億" → 100000000, 120000000
+    match = re.search(r'(\d+(?:[.,]\d+)?)\s*億(?:円)?', text)
+    if match:
+        try:
+            amount = float(match.group(1).replace(',', ''))
+            return int(amount * 100000000)
+        except ValueError:
+            pass
 
     # 万円 形式: "1000万円" → 10000000
     match = re.search(r'(\d+(?:[.,]\d+)?)\s*万円', text)
