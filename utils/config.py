@@ -23,8 +23,9 @@ class Config:
     OUTPUT_DIR = os.getenv('OUTPUT_DIR', './output')
 
     # PDF Generation
-    GHOSTSCRIPT_PATH = os.getenv('GHOSTSCRIPT_PATH', '/opt/homebrew/bin/gs')
-    LIBREOFFICE_PATH = os.getenv('LIBREOFFICE_PATH', '/Applications/LibreOffice.app/Contents/MacOS/soffice')
+    # Railway コンテナ環境では PATH から自動検索、ローカル環境では環境変数で指定
+    GHOSTSCRIPT_PATH = os.getenv('GHOSTSCRIPT_PATH', 'gs')
+    LIBREOFFICE_PATH = os.getenv('LIBREOFFICE_PATH', 'libreoffice')
 
     # Automation rules
     DEFAULT_DOWN_PAYMENT = 1000000  # 100万円
