@@ -53,12 +53,21 @@ class PDFExtractor:
 
     def _extract_property_name(self, text: str) -> Optional[str]:
         """物件名を抽出"""
-        # 「物件名」「物 件 名」の後の文字列を抽出
+        # パターン1: 「物件名：」「物件名 」の後の文字列
         match = re.search(r'物\s*件\s*名[：:]?\s*([^\n]+)', text)
         if match:
             name = match.group(1).strip()
             if name and name != '':
                 return name
+
+        # パターン2: 「種類 共同住宅」の直前にある物件名（寿マンションのようなフォーマット）
+        # 「延床面積」の前で1行戻して物件名を探す
+        match = re.search(r'([^\n\s]+(?:マンション|ビル|アパート|戸建|住宅|建物))\s*\n.*?延床面積', text, re.DOTALL)
+        if match:
+            name = match.group(1).strip()
+            if name and len(name) < 50:
+                return name
+
         return None
 
     def _extract_location(self, text: str) -> Optional[str]:
@@ -71,14 +80,15 @@ class PDFExtractor:
 
     def _extract_land_area(self, text: str) -> Optional[float]:
         """土地面積を抽出"""
-        # 「地積」「土地面積」「売却希望面積」の後の数値を抽出
         patterns = [
             r'土\s*地\s*面\s*積\s*([\d.]+)',
             r'地\s*積\s*([\d.]+)',
-            r'売却希望面積\s*([\d.]+)'
+            r'売却希望面積\s*([\d.]+)',
+            # 「面積 」で始まる行の最初の数値（土地面積ラベルなしの場合）
+            r'(?:^|\n)\s*面\s*積\s+([\d.]+)\s*㎡'
         ]
         for pattern in patterns:
-            match = re.search(pattern, text)
+            match = re.search(pattern, text, re.MULTILINE)
             if match:
                 try:
                     return float(match.group(1))
@@ -88,8 +98,8 @@ class PDFExtractor:
 
     def _extract_building_area(self, text: str) -> Optional[float]:
         """建物面積を抽出"""
-        # 「合計」「建物面積」「床面積」の後の数値を抽出
         patterns = [
+            r'延\s*床\s*面\s*積\s+([\d.]+)',  # 延床面積（最優先）
             r'建\s*物\s*面\s*積\s*([\d.]+)',
             r'床\s*面\s*積\s*([\d.]+)',
             r'合\s*計\s*([\d.]+)'
