@@ -14,9 +14,12 @@ import time
 import os
 import io
 import struct
+import logging
 from pathlib import Path
 from typing import Optional
 from utils.config import config
+
+logger = logging.getLogger(__name__)
 
 try:
     from PIL import Image
@@ -67,7 +70,7 @@ class PDFGenerator:
             return True
 
         except Exception as e:
-            print(f"Error generating PDF: {e}")
+            logger.error(f"Error generating PDF: {e}", exc_info=True)
             return False
 
     @staticmethod

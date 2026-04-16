@@ -275,7 +275,7 @@ def generate_certificate_pdf(user_id: str) -> Optional[str]:
         return str(pdf_path)
 
     except Exception as e:
-        print(f"Error generating certificate: {e}")
+        logger.error(f"Error generating certificate: {e}", exc_info=True)
         user_state = state_manager.get_state(user_id)
         user_state.state = 'error'
         state_manager.set_state(user_state)
