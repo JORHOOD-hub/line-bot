@@ -130,14 +130,14 @@ class PDFGenerator:
                     temp_xlsx.unlink()  # 一時ファイル削除
                 return True
             else:
-                print(f"Error: Generated PDF not found at {generated_pdf}")
-                print(f"stderr: {result.stderr.decode()}")
+                logger.error(f"Error: Generated PDF not found at {generated_pdf}")
+                logger.error(f"stderr: {result.stderr.decode()}")
                 if temp_xlsx.exists():
                     temp_xlsx.unlink()
                 return False
 
         except Exception as e:
-            print(f"Error in LibreOffice PDF export: {e}")
+            logger.error(f"Error in LibreOffice PDF export: {e}", exc_info=True)
             return False
 
     @staticmethod
@@ -177,7 +177,7 @@ class PDFGenerator:
             return Path(seal_png_path).exists()
 
         except Exception as e:
-            print(f"Error extracting seal: {e}")
+            logger.error(f"Error extracting seal: {e}", exc_info=True)
             return False
 
     @staticmethod
@@ -239,7 +239,7 @@ class PDFGenerator:
             return True
 
         except Exception as e:
-            print(f"Error overlaying seal: {e}")
+            logger.error(f"Error overlaying seal: {e}", exc_info=True)
             return False
 
     def cleanup(self):
@@ -249,4 +249,4 @@ class PDFGenerator:
             if self.temp_dir.exists():
                 shutil.rmtree(self.temp_dir)
         except Exception as e:
-            print(f"Error cleaning up: {e}")
+            logger.warning(f"Error cleaning up: {e}")
