@@ -25,7 +25,7 @@ def handle_message(user_id: str, text: str) -> tuple:
     if user_state.state == 'waiting_pdf':
         return handle_waiting_pdf(user_id, text), None
     elif user_state.state == 'waiting_price':
-        return handle_waiting_price(user_id, text), None
+        return handle_waiting_price(user_id, text)
     elif user_state.state == 'waiting_down_payment':
         return handle_waiting_down_payment(user_id, text), None
     elif user_state.state == 'waiting_expiration':
@@ -65,10 +65,11 @@ def handle_waiting_pdf(user_id: str, text: str) -> str:
     )
 
 
-def handle_waiting_price(user_id: str, text: str) -> str:
+def handle_waiting_price(user_id: str, text: str) -> tuple:
     """
     購入価格入力待機状態
     例：「1000万円」「50000000」など
+    返り値: (response_text, pdf_path_or_none)
     """
     price = parse_price_input(text)
 
@@ -78,7 +79,8 @@ def handle_waiting_price(user_id: str, text: str) -> str:
             "以下のいずれかの形式でお願いします：\n"
             "- 1000万円\n"
             "- 1億円\n"
-            "- 100000000"
+            "- 100000000",
+            None
         )
 
     # 購入価格を保存
@@ -101,19 +103,19 @@ def handle_waiting_price(user_id: str, text: str) -> str:
 
     # PDF生成を実行
     try:
-        generate_certificate_pdf(user_id)
+        pdf_path = generate_certificate_pdf(user_id)
         message = (
             f"ありがとうございます！\n"
             f"購入価格：{price:,}円\n"
             f"手付金：{config.DEFAULT_DOWN_PAYMENT:,}円\n"
             f"有効期限：{expiration_date.strftime('%Y年%m月%d日')}\n\n"
-            f"買付証明書を生成中です...\n"
-            f"少々お待ちください。"
+            f"買付証明書が完成しました！"
         )
+        return message, pdf_path
     except Exception as e:
+        logger.error(f"PDF generation error: {e}", exc_info=True)
         message = f"申し訳ございません。PDF生成に失敗しました。\n\n{str(e)}"
-
-    return message
+        return message, None
 
 
 def handle_waiting_down_payment(user_id: str, text: str) -> str:
