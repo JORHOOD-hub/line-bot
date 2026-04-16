@@ -53,10 +53,12 @@ class PDFExtractor:
 
     def _extract_property_name(self, text: str) -> Optional[str]:
         """物件名を抽出"""
-        # 「物件名」の後の文字列を抽出
-        match = re.search(r'物件名[：:]?\s*([^\n]+)', text)
+        # 「物件名」「物 件 名」の後の文字列を抽出
+        match = re.search(r'物\s*件\s*名[：:]?\s*([^\n]+)', text)
         if match:
-            return match.group(1).strip()
+            name = match.group(1).strip()
+            if name and name != '':
+                return name
         return None
 
     def _extract_location(self, text: str) -> Optional[str]:
@@ -69,25 +71,36 @@ class PDFExtractor:
 
     def _extract_land_area(self, text: str) -> Optional[float]:
         """土地面積を抽出"""
-        # 「登記簿 売却希望面積」の後の最初の数値を抽出（土地面積）
-        # または「地　積」の後の数値
-        match = re.search(r'(?:地\s*積|売却希望面積)\s*([\d.]+)\s*㎡', text)
-        if match:
-            try:
-                return float(match.group(1))
-            except ValueError:
-                pass
+        # 「地積」「土地面積」「売却希望面積」の後の数値を抽出
+        patterns = [
+            r'土\s*地\s*面\s*積\s*([\d.]+)',
+            r'地\s*積\s*([\d.]+)',
+            r'売却希望面積\s*([\d.]+)'
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, text)
+            if match:
+                try:
+                    return float(match.group(1))
+                except ValueError:
+                    pass
         return None
 
     def _extract_building_area(self, text: str) -> Optional[float]:
         """建物面積を抽出"""
-        # 「合　計」または「合 計」の後の数値を抽出（建物の合計床面積）
-        match = re.search(r'合\s*計\s*([\d.]+)\s*㎡', text)
-        if match:
-            try:
-                return float(match.group(1))
-            except ValueError:
-                pass
+        # 「合計」「建物面積」「床面積」の後の数値を抽出
+        patterns = [
+            r'建\s*物\s*面\s*積\s*([\d.]+)',
+            r'床\s*面\s*積\s*([\d.]+)',
+            r'合\s*計\s*([\d.]+)'
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, text)
+            if match:
+                try:
+                    return float(match.group(1))
+                except ValueError:
+                    pass
         return None
 
     def _extract_purchase_price(self, text: str) -> Optional[int]:
