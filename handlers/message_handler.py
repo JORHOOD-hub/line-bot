@@ -74,25 +74,43 @@ def handle_waiting_price(user_id: str, text: str) -> str:
             "購入価格が認識できませんでした。\n"
             "以下のいずれかの形式でお願いします：\n"
             "- 1000万円\n"
-            "- 100000000\n"
-            "- 1千万円"
+            "- 1億円\n"
+            "- 100000000"
         )
 
     # 購入価格を保存
     state_manager.update_property_data(user_id, 'purchase_price', price)
 
-    # 次の状態へ
+    # 手付金をデフォルト値で設定（質問しない）
     user_state = state_manager.get_state(user_id)
-    user_state.state = 'waiting_down_payment'
+    state_manager.update_property_data(user_id, 'down_payment', config.DEFAULT_DOWN_PAYMENT)
+
+    # 有効期間を計算
+    created_date = datetime.now()
+    expiration_date = created_date + timedelta(days=config.DEFAULT_EXPIRATION_DAYS)
+
+    state_manager.update_property_data(user_id, 'created_date', created_date.isoformat())
+    state_manager.update_property_data(user_id, 'expiration_date', expiration_date.isoformat())
+
+    # 次の状態へ（waiting_expiration をスキップして直接 generating へ）
+    user_state.state = 'generating'
     state_manager.set_state(user_state)
 
-    return (
-        f"購入価格：{price:,}円ですね。\n\n"
-        f"手付金をお手数いただけますでしょうか？\n"
-        f"指定がない場合は、100万円で進めます。\n\n"
-        f"[はい]\n"
-        f"[カスタム金額を入力]"
-    )
+    # PDF生成を実行
+    try:
+        generate_certificate_pdf(user_id)
+        message = (
+            f"ありがとうございます！\n"
+            f"購入価格：{price:,}円\n"
+            f"手付金：{config.DEFAULT_DOWN_PAYMENT:,}円\n"
+            f"有効期限：{expiration_date.strftime('%Y年%m月%d日')}\n\n"
+            f"買付証明書を生成中です...\n"
+            f"少々お待ちください。"
+        )
+    except Exception as e:
+        message = f"申し訳ございません。PDF生成に失敗しました。\n\n{str(e)}"
+
+    return message
 
 
 def handle_waiting_down_payment(user_id: str, text: str) -> str:
