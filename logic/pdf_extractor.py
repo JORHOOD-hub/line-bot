@@ -54,41 +54,46 @@ class PDFExtractor:
     def _extract_property_name(self, text: str) -> Optional[str]:
         """物件名を抽出"""
         # パターン1: 「物件名：」「物件名 」の後の文字列
-        match = re.search(r'物\s*件\s*名[：:]?\s*([^\n]+)', text)
+        match = re.search(r'物件名[：:]?\s*([^\n]+)', text)
         if match:
             name = match.group(1).strip()
             if name and name != '':
                 return name
 
-        # パターン2: 「種類 共同住宅」の直前にある物件名（寿マンションのようなフォーマット）
-        # 「延床面積」の前で1行戻して物件名を探す
-        match = re.search(r'([^\n\s]+(?:マンション|ビル|アパート|戸建|住宅|建物))\s*\n.*?延床面積', text, re.DOTALL)
-        if match:
-            name = match.group(1).strip()
-            if name and len(name) < 50:
-                return name
+        # パターン2: 「マンション」「ビル」「アパート」などのキーワードを含む単語を検出
+        # 「延床面積」の直前の行にある可能性が高い
+        lines = text.split('\n')
+        for i, line in enumerate(lines):
+            if any(kw in line for kw in ['マンション', 'ビル', 'アパート', '戸建', '住宅', '建物']):
+                name = line.strip()
+                if name and 1 < len(name) < 50:
+                    return name
 
         return None
 
     def _extract_location(self, text: str) -> Optional[str]:
         """所在地を抽出"""
-        # 「所在地」「所　在」「所在」の後の文字列を抽出
-        match = re.search(r'所\s*[在地]?[：:]?\s*([^\n]+)', text)
+        # 「所在地」の後の文字列を抽出（「地」の部分が含まれないように）
+        match = re.search(r'所在地[：:]?\s*([^\n]+)', text)
         if match:
-            return match.group(1).strip()
+            location = match.group(1).strip()
+            # 最初の「地 」を削除
+            if location.startswith('地 '):
+                location = location[2:].strip()
+            return location
         return None
 
     def _extract_land_area(self, text: str) -> Optional[float]:
         """土地面積を抽出"""
         patterns = [
-            r'土\s*地\s*面\s*積\s*([\d.]+)',
-            r'地\s*積\s*([\d.]+)',
-            r'売却希望面積\s*([\d.]+)',
-            # 「面積 」で始まる行の最初の数値（土地面積ラベルなしの場合）
-            r'(?:^|\n)\s*面\s*積\s+([\d.]+)\s*㎡'
+            r'土地面積[：:]?\s*([\d.]+)',
+            r'地積[：:]?\s*([\d.]+)',
+            r'売却希望面積[：:]?\s*([\d.]+)',
+            # 「面積 283.67㎡」というフォーマット（土地面積は最初の面積）
+            r'面積\s+([\d.]+)\s*㎡'
         ]
         for pattern in patterns:
-            match = re.search(pattern, text, re.MULTILINE)
+            match = re.search(pattern, text)
             if match:
                 try:
                     return float(match.group(1))
