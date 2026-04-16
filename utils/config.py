@@ -1,8 +1,7 @@
 import os
-from dotenv import load_dotenv
 from pathlib import Path
 
-load_dotenv()
+# load_dotenv() は削除 - Railway は環境変数を Variables タブから自動設定
 
 class Config:
     """アプリケーション設定"""
