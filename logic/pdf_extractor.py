@@ -54,27 +54,30 @@ class PDFExtractor:
     def _extract_property_name(self, text: str) -> Optional[str]:
         """物件名を抽出"""
         # パターン1: 「物件名：」「物件名 」の後の文字列
-        match = re.search(r'物件名[：:]?\s*([^\n]+)', text)
+        match = re.search(r'物\s*件\s*名[：:]?\s*([^\n]+)', text)
         if match:
             name = match.group(1).strip()
             if name and name != '':
                 return name
 
-        # パターン2: 「マンション」「ビル」「アパート」などのキーワードを含む単語を検出
-        # 「延床面積」の直前の行にある可能性が高い
+        # パターン2: 建物種別の直前の行にある物件名を検出
+        # 「延床面積」「寿マンション」などの流れを想定
         lines = text.split('\n')
         for i, line in enumerate(lines):
-            if any(kw in line for kw in ['マンション', 'ビル', 'アパート', '戸建', '住宅', '建物']):
-                name = line.strip()
-                if name and 1 < len(name) < 50:
-                    return name
+            # 「マンション」「ビル」などが含まれる行
+            if any(kw in line for kw in ['マンション', 'ビル', 'アパート', '戸建', '住宅']):
+                # 建物種別の行（「中古（1棟）マンション」など）ではない
+                if not re.search(r'中古|新築|築', line):
+                    name = line.strip()
+                    if name and 1 < len(name) < 50 and not any(c.isdigit() for c in name[:3]):
+                        return name
 
         return None
 
     def _extract_location(self, text: str) -> Optional[str]:
         """所在地を抽出"""
-        # 「所在地」の後の文字列を抽出
-        match = re.search(r'所在地[：:]?\s*(.+?)(?:\n|$)', text)
+        # 「所在地」の後の文字列を抽出（スペースに対応）
+        match = re.search(r'所\s*在\s*地[：:]?\s*(.+?)(?:\n|$)', text)
         if match:
             location = match.group(1).strip()
             # 最初の「地 」「在地 」を削除
@@ -86,12 +89,12 @@ class PDFExtractor:
     def _extract_land_area(self, text: str) -> Optional[float]:
         """土地面積を抽出"""
         patterns = [
-            r'土地面積[：:]?\s*([\d.]+)',
-            r'地積[：:]?\s*([\d.]+)',
-            r'売却希望面積[：:]?\s*([\d.]+)',
+            r'土\s*地\s*面\s*積[：:]?\s*([\d.]+)',
+            r'地\s*積[：:]?\s*([\d.]+)',
+            r'売\s*却\s*希\s*望\s*面\s*積[：:]?\s*([\d.]+)',
             # 「面積 283.67㎡」というフォーマット（行の最初の「面積」のみ）
             # 「延床面積」「1階面積」などは除外
-            r'(?:^|\n)\s*面積\s+([\d.]+)\s*㎡'
+            r'(?:^|\n)\s*面\s*積\s+([\d.]+)\s*㎡'
         ]
         for pattern in patterns:
             match = re.search(pattern, text, re.MULTILINE)
@@ -118,15 +121,42 @@ class PDFExtractor:
                 except ValueError:
                     pass
         return None
+        for pattern in patterns:
+            match = re.search(pattern, text)
+            if match:
+                try:
+                    return float(match.group(1))
+                except ValueError:
+                    pass
+        return None
 
     def _extract_purchase_price(self, text: str) -> Optional[int]:
         """購入価格を抽出"""
         # 「購入価格」「購 入 価格」の後の数値を抽出
-        match = re.search(r'購\s*入\s*価格[：:]?\s*([\d,]+)\s*(?:円|万円)', text)
+        # パターン1: 「購入価格 3,800万円」
+        match = re.search(r'購\s*入\s*価格[：:]?\s*([\d,]+)\s*万?\s*円', text)
         if match:
             try:
                 price_str = match.group(1).replace(',', '')
-                return int(price_str)
+                price = int(price_str)
+                # もし万円単位なら × 10000
+                if '万' in text[match.start():match.end()]:
+                    price *= 10000
+                return price
             except ValueError:
                 pass
+
+        # パターン2: 「価 格」で検索
+        match = re.search(r'価\s*格[：:]?\s*([\d,]+)\s*万?\s*円', text)
+        if match:
+            try:
+                price_str = match.group(1).replace(',', '')
+                price = int(price_str)
+                # もし万円単位なら × 10000
+                if '万' in text[match.start():match.end()]:
+                    price *= 10000
+                return price
+            except ValueError:
+                pass
+
         return None
