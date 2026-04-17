@@ -6,7 +6,8 @@ from flask import Flask, request, abort, send_file
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import (
-    MessageEvent, TextMessage, TextSendMessage, FileMessage
+    MessageEvent, TextMessage, TextSendMessage, FileMessage,
+    TemplateSendMessage, ButtonsTemplate, URIAction
 )
 import tempfile
 from pathlib import Path
@@ -139,7 +140,7 @@ def get_pdf(user_id):
 def send_pdf_to_user(user_id: str, pdf_path: str):
     """
     生成したPDFをLINEユーザーに送信
-    LINE Messaging API REST 経由でPDFファイルを直接送信
+    ボタンテンプレートメッセージで「ダウンロード」ボタンを表示
     """
     try:
         pdf_path = Path(pdf_path)
@@ -153,32 +154,27 @@ def send_pdf_to_user(user_id: str, pdf_path: str):
         base_url = os.getenv('BASE_URL', 'https://line-bot-production-2689.up.railway.app')
         download_url = f"{base_url}/pdf/{user_id}"
 
-        logger.info(f"Sending PDF file to {user_id} via REST API: {download_url}")
+        logger.info(f"Sending PDF button template to {user_id}: {download_url}")
 
-        # LINE Messaging API に REST リクエストでファイルを送信
-        api_url = "https://api.line.me/v2/bot/message/push"
-        headers = {
-            "Authorization": f"Bearer {config.LINE_ACCESS_TOKEN}",
-            "Content-Type": "application/json"
-        }
-
-        payload = {
-            "to": user_id,
-            "messages": [
-                {
-                    "type": "file",
-                    "originalContentUrl": download_url,
-                    "fileName": "買付証明書.pdf"
-                }
+        # ボタンテンプレートメッセージを作成
+        buttons_template = ButtonsTemplate(
+            title='買付証明書',
+            text='✅ 完成しました！\n\n以下からダウンロードしてください。',
+            actions=[
+                URIAction(
+                    label='📥 ダウンロード',
+                    uri=download_url
+                )
             ]
-        }
+        )
 
-        response = requests.post(api_url, json=payload, headers=headers)
+        message = TemplateSendMessage(
+            alt_text='買付証明書が完成しました',
+            template=buttons_template
+        )
 
-        if response.status_code == 200:
-            logger.info(f"PDF file sent successfully to {user_id}")
-        else:
-            logger.error(f"Failed to send PDF: {response.status_code} - {response.text}")
+        line_bot_api.push_message(user_id, message)
+        logger.info(f"PDF button template sent successfully to {user_id}")
 
     except Exception as e:
         logger.error(f'Error sending PDF: {e}', exc_info=True)
