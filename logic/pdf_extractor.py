@@ -67,6 +67,12 @@ class PDFExtractor:
             if any(kw in name for kw in ['管理ID', 'ID ', '管理']):
                 # 「管理ID」の前までを取得
                 name = re.sub(r'\s*(?:管理ID|ID|管理).*$', '', name).strip()
+            # 「住居」「種別」などが含まれていれば、その前までを抽出（朋竹ハイツ対策）
+            if any(kw in name for kw in ['住居 ', '種別 ', '一棟']):
+                # 最初の「物件名」だけを取得（空白までを取得するパターン）
+                match_name = re.match(r'([^\s]+(?:\s+[^\s]+)*?)(?:\s+(?:住居|種別|一棟|構造))', name)
+                if match_name:
+                    name = match_name.group(1).strip()
             if name and name != '':
                 return name
 
@@ -122,19 +128,22 @@ class PDFExtractor:
     def _extract_land_area(self, text: str) -> Optional[float]:
         """土地面積を抽出"""
         patterns = [
-            r'土\s*地\s*面\s*積[：:]?\s*([\d.]+)',
-            # 「地積(公簿)」「地積 」のパターン（括弧に対応）
-            r'地\s*積\s*(?:\([^)]*\))?\s*[：:]?\s*([\d.]+)',
-            r'売\s*却\s*希\s*望\s*面\s*積[：:]?\s*([\d.]+)',
+            r'土\s*地\s*面\s*積[：:]?\s*([\d.,]+)',
+            # 「地積(公簿)」「地積（公簿）」「地積 」のパターン（括弧に対応）
+            r'地\s*積\s*(?:[（(][^）)]*[）)]|\([^)]*\))?\s*[：:]?\s*([\d.,]+)',
+            # 「公簿」の直後に数値がある（カンマ・ドット対応、改行対応）
+            r'公\s*簿\s+[（(]?[^）)]*[）)]?\s*([\d.,]+)',
+            r'売\s*却\s*希\s*望\s*面\s*積[：:]?\s*([\d.,]+)',
             # 「面積 283.67㎡」というフォーマット（行の最初の「面積」のみ）
             # 「延床面積」「1階面積」などは除外
-            r'(?:^|\n)\s*面\s*積\s+([\d.]+)\s*㎡'
+            r'(?:^|\n)\s*面\s*積\s+([\d.,]+)\s*㎡'
         ]
         for pattern in patterns:
             match = re.search(pattern, text, re.MULTILINE)
             if match:
                 try:
-                    return float(match.group(1))
+                    val_str = match.group(1).replace(',', '')  # カンマを削除
+                    return float(val_str)
                 except ValueError:
                     pass
         return None
@@ -143,6 +152,8 @@ class PDFExtractor:
         """建物面積を抽出"""
         patterns = [
             r'延\s*床\s*面\s*積\s+([\d.]+)',  # 延床面積（最優先）
+            # 「延床 510.93㎡」のように「面積」がない場合
+            r'延\s*床\s+(?!面)([\d.]+)',
             r'建\s*物\s*面\s*積\s*([\d.]+)',
             r'床\s*面\s*積\s*([\d.]+)',
             r'合\s*計\s*([\d.]+)'
