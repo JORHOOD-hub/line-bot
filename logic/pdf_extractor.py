@@ -138,7 +138,6 @@ class PDFExtractor:
 
     def _extract_purchase_price(self, text: str) -> Optional[int]:
         """購入価格を抽出"""
-        # 「購入価格」「購 入 価格」の後の数値を抽出
         # パターン1: 「購入価格 3,800万円」
         match = re.search(r'購\s*入\s*価格[：:]?\s*([\d,]+)\s*万?\s*円', text)
         if match:
@@ -152,15 +151,24 @@ class PDFExtractor:
             except ValueError:
                 pass
 
-        # パターン2: 「価 格」で検索
-        match = re.search(r'価\s*格[：:]?\s*([\d,]+)\s*万?\s*円', text)
+        # パターン2: 「価 格」の直前の数値を探す（改行対応）
+        # 「3,800万円\n価 格」というフォーマット
+        match = re.search(r'([\d,]+)\s*万\s*円\s*(?:\n|\s)*価\s*格', text)
         if match:
             try:
                 price_str = match.group(1).replace(',', '')
-                price = int(price_str)
-                # もし万円単位なら × 10000
-                if '万' in text[match.start():match.end()]:
-                    price *= 10000
+                price = int(price_str) * 10000  # 万円なので × 10000
+                return price
+            except ValueError:
+                pass
+
+        # パターン3: 単純に「(数値)万円」を探す（フォーマット「価 格」「3,800万円」が別の場合）
+        match = re.search(r'([\d,]+)\s*万\s*円', text)
+        if match:
+            try:
+                price_str = match.group(1).replace(',', '')
+                price = int(price_str) * 10000  # 万円なので × 10000
+                logger.info(f"Found purchase price via pattern 3: {price}")
                 return price
             except ValueError:
                 pass
