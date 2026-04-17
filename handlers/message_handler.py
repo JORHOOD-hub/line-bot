@@ -13,6 +13,7 @@ from handlers.修正_handler import handle_修正指示
 
 logger = logging.getLogger(__name__)
 
+
 def handle_message(user_id: str, text: str) -> tuple:
     """
     ユーザーメッセージを処理し、適切な応答を返す
@@ -86,9 +87,20 @@ def handle_waiting_price(user_id: str, text: str) -> tuple:
     # 購入価格を保存
     state_manager.update_property_data(user_id, 'purchase_price', price)
 
-    # 手付金をデフォルト値で設定（質問しない）
+    # 手付金を抽出（指定があれば）、なければデフォルト値を使用
+    down_payment = config.DEFAULT_DOWN_PAYMENT
+    if any(kw in text for kw in ['手付金']):
+        # 「手付金は300万円で」から「300万円」を抽出
+        match = re.search(r'手付金[は]?(.+?)(?:で|。|$)', text)
+        if match:
+            deposit_text = match.group(1).strip()
+            extracted_deposit = parse_price_input(deposit_text)
+            if extracted_deposit is not None:
+                down_payment = extracted_deposit
+                logger.info(f"手付金を指定で抽出: {down_payment}円")
+
     user_state = state_manager.get_state(user_id)
-    state_manager.update_property_data(user_id, 'down_payment', config.DEFAULT_DOWN_PAYMENT)
+    state_manager.update_property_data(user_id, 'down_payment', down_payment)
 
     # 有効期間を計算
     created_date = datetime.now()
@@ -107,7 +119,7 @@ def handle_waiting_price(user_id: str, text: str) -> tuple:
         message = (
             f"ありがとうございます！\n"
             f"購入価格：{price:,}円\n"
-            f"手付金：{config.DEFAULT_DOWN_PAYMENT:,}円\n"
+            f"手付金：{down_payment:,}円\n"
             f"有効期限：{expiration_date.strftime('%Y年%m月%d日')}\n\n"
             f"買付証明書が完成しました！"
         )

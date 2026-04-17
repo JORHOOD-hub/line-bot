@@ -6,10 +6,10 @@ def parse_price_input(text: str) -> Optional[int]:
     テキスト入力から購入価格を抽出
     対応形式：
     - 1億円、1.2億、1.2億円
-    - 1000万円
+    - 1000万円、3500万、15000万円
+    - 2千万円、1千万
     - 100,000,000
     - 100000000
-    - 1千万円
     """
     text = text.strip()
 
@@ -22,21 +22,21 @@ def parse_price_input(text: str) -> Optional[int]:
         except ValueError:
             pass
 
-    # 万円 形式: "1000万円" → 10000000
-    match = re.search(r'(\d+(?:[.,]\d+)?)\s*万円', text)
-    if match:
-        try:
-            amount = float(match.group(1).replace(',', ''))
-            return int(amount * 10000)
-        except ValueError:
-            pass
-
-    # 千万円 形式: "1千万円" → 10000000
-    match = re.search(r'(\d+)\s*千万円', text)
+    # 千万 形式（優先度高）: "2千万円" "1千万" → 20000000, 10000000
+    match = re.search(r'(\d+)\s*千\s*万\s*(?:円)?', text)
     if match:
         try:
             amount = int(match.group(1))
             return amount * 10000000
+        except ValueError:
+            pass
+
+    # 万 形式: "1000万円" "3500万" "15000万円" → 10000000, 35000000, 150000000
+    match = re.search(r'(\d+(?:[.,]\d+)?)\s*万\s*(?:円)?', text)
+    if match:
+        try:
+            amount = float(match.group(1).replace(',', ''))
+            return int(amount * 10000)
         except ValueError:
             pass
 
