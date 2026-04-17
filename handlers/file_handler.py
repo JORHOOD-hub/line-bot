@@ -22,15 +22,13 @@ def handle_pdf_file(user_id: str, pdf_path: str) -> str:
         extractor = PDFExtractor(pdf_path)
         extracted_data = extractor.extract_data()
 
-        # ユーザーの状態を取得
-        user_state = state_manager.get_state(user_id)
-
-        # 抽出したデータを状態に保存
+        # 抽出したデータを状態に保存（update_property_data は内部で get_state を呼ぶため、古い state を上書きしないように注意）
         for key, value in extracted_data.items():
             if value is not None:
                 state_manager.update_property_data(user_id, key, value)
 
-        # 状態を「購入価格入力待ち」に変更
+        # 状態を「購入価格入力待ち」に変更（最新の state を取得）
+        user_state = state_manager.get_state(user_id)
         user_state.state = 'waiting_price'
         state_manager.set_state(user_state)
 
