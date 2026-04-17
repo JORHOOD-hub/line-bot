@@ -68,17 +68,29 @@ class PDFExtractor:
                 # 「管理ID」の前までを取得
                 name = re.sub(r'\s*(?:管理ID|ID|管理).*$', '', name).strip()
             # 「住居」「種別」などが含まれていれば、その前までを抽出（朋竹ハイツ対策）
-            if any(kw in name for kw in ['住居 ', '種別 ', '一棟']):
+            if any(kw in name for kw in ['住居 ', '種別 ', '一棟', '（一棟']):
                 # 最初の「物件名」だけを取得（空白までを取得するパターン）
-                match_name = re.match(r'([^\s]+(?:\s+[^\s]+)*?)(?:\s+(?:住居|種別|一棟|構造))', name)
+                match_name = re.match(r'([^\s]+(?:\s+[^\s]+)*?)(?:\s+(?:住居|種別|一棟|構造|（))', name)
                 if match_name:
                     name = match_name.group(1).strip()
             if name and name != '':
                 return name
 
-        # パターン2: 建物種別の直前の行にある物件名を検出
-        # 「延床面積」「寿マンション」などの流れを想定
+        # パターン2: 最初の行に物件名がある（コルデソル下関対策）
+        # 「空室・居住中・賃貸中」などの情報行をスキップして、次の日本語行を物件名と判定
         lines = text.split('\n')
+        for i, line in enumerate(lines[:5]):  # 最初の5行をチェック
+            line = line.strip()
+            # 建物種別情報や記号が含まれない、純粋な日本語行
+            if line and not any(kw in line for kw in ['空室', '居住', '賃貸', '【', '【間', '消費税', '価格']):
+                # ヒラガナ、カタカナ、漢字を含むかチェック
+                if re.search(r'[ぁ-ん]|[ァ-ヴー]|[一-龯]', line):
+                    # 数字が多く含まれていない、かつ建物種別や括弧を含まない
+                    if not re.search(r'[\d,]{3,}|マンション|ビル|アパート|戸建|（|）|【|】', line):
+                        return line
+
+        # パターン3: 建物種別の直前の行にある物件名を検出
+        # 「延床面積」「寿マンション」などの流れを想定
         for i, line in enumerate(lines):
             # 「マンション」「ビル」などが含まれる行
             if any(kw in line for kw in ['マンション', 'ビル', 'アパート', '戸建', '住宅']):
@@ -109,16 +121,32 @@ class PDFExtractor:
                 if self._is_valid_location(location):
                     return location
 
-        # パターン3: 「所在地」の後の文字列を抽出（ただし、右側が「外観」などでないこと）
-        match = re.search(r'所\s*在\s*地[：:]?\s*(.+?)(?:\n|$)', text)
-        if match:
-            location = match.group(1).strip()
-            # 最初の「地 」「在地 」を削除
-            location = re.sub(r'^[地在地]+\s*', '', location).strip()
-            # 「外観」「画像」などの非地住所情報ではないことを確認
-            if location and not any(kw in location for kw in ['外観', '画像', '写真']):
-                if self._is_valid_location(location):
-                    return location
+        # パターン3: 「所在」「所在地」の後の複数行から住居表示を優先
+        # コルデソル下関対策：地番と住居表示が複数行ある場合、住居表示を採用
+        for label in ['所\s*在[^\n]*?', '所\s*在\s*地']:
+            match = re.search(rf'{label}[：:]?\s*(.+?)(?:地目|権利|交通|建築|〒|$)', text, re.DOTALL)
+            if match:
+                location_block = match.group(1).strip()
+                # 複数行の場合、「(住居表示：」を含む行を探す
+                lines = location_block.split('\n')
+
+                # 住居表示を含む行を優先
+                for line in lines:
+                    if '住居表示' in line or '(' in line:
+                        loc = line.strip()
+                        if self._is_valid_location(loc):
+                            return loc
+
+                # 住居表示がない場合、最後の行（住居表示）を試す
+                if lines:
+                    loc = lines[-1].strip() if len(lines) > 1 else lines[0].strip()
+                    # 最初の「地 」「在地 」を削除
+                    loc = re.sub(r'^[地在地]+\s*', '', loc).strip()
+                    # 「外観」「画像」などの非地住所情報ではないことを確認
+                    if loc and not any(kw in loc for kw in ['外観', '画像', '写真']):
+                        if self._is_valid_location(loc):
+                            return loc
+
         return None
 
     def _is_valid_location(self, location: str) -> bool:
@@ -190,6 +218,17 @@ class PDFExtractor:
                     return price
                 except ValueError:
                     pass
+
+        # パターン1.5: 「価格」ラベルの直前に数値がある場合（改行対応）
+        # コルデソル下関対策：「8,200」「価格 万円」という形式
+        match = re.search(r'([\d,]+)\s*\n\s*価\s*格\s*万\s*(?:円)?', text)
+        if match:
+            try:
+                price_str = match.group(1).replace(',', '')
+                price = int(price_str) * 10000  # 万円なので × 10000
+                return price
+            except ValueError:
+                pass
 
         # パターン2: 「価 格」の直前の数値を探す（改行対応）
         # 「3,800万円\n価 格」というフォーマット
