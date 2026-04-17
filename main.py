@@ -156,7 +156,7 @@ def send_pdf_to_user(user_id: str, pdf_path: str):
         logger.info(f"Sending PDF file to {user_id} via REST API: {download_url}")
 
         # LINE Messaging API に REST リクエストでファイルを送信
-        api_url = "https://api.line.biz/v2/bot/message/push"
+        api_url = "https://api.line.me/v2/bot/message/push"
         headers = {
             "Authorization": f"Bearer {config.LINE_ACCESS_TOKEN}",
             "Content-Type": "application/json"
