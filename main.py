@@ -10,6 +10,7 @@ from linebot.models import (
 )
 import tempfile
 from pathlib import Path
+import requests
 
 from utils.config import config
 from handlers.message_handler import handle_message
@@ -138,7 +139,7 @@ def get_pdf(user_id):
 def send_pdf_to_user(user_id: str, pdf_path: str):
     """
     生成したPDFをLINEユーザーに送信
-    Flask エンドポイント経由でダウンロードリンクを生成して送信
+    LINE Messaging API REST 経由でPDFファイルを直接送信
     """
     try:
         pdf_path = Path(pdf_path)
@@ -152,17 +153,32 @@ def send_pdf_to_user(user_id: str, pdf_path: str):
         base_url = os.getenv('BASE_URL', 'https://line-bot-production-2689.up.railway.app')
         download_url = f"{base_url}/pdf/{user_id}"
 
-        logger.info(f"Sending download link to {user_id}: {download_url}")
+        logger.info(f"Sending PDF file to {user_id} via REST API: {download_url}")
 
-        # ダウンロードリンク付きメッセージを送信
-        line_bot_api.push_message(
-            user_id,
-            TextSendMessage(
-                text=f'📄 買付証明書が完成しました！\n\n'
-                     f'以下のリンクからダウンロードしてください：\n\n'
-                     f'{download_url}'
-            )
-        )
+        # LINE Messaging API に REST リクエストでファイルを送信
+        api_url = "https://api.line.biz/v2/bot/message/push"
+        headers = {
+            "Authorization": f"Bearer {config.LINE_ACCESS_TOKEN}",
+            "Content-Type": "application/json"
+        }
+
+        payload = {
+            "to": user_id,
+            "messages": [
+                {
+                    "type": "file",
+                    "originalContentUrl": download_url,
+                    "fileName": "買付証明書.pdf"
+                }
+            ]
+        }
+
+        response = requests.post(api_url, json=payload, headers=headers)
+
+        if response.status_code == 200:
+            logger.info(f"PDF file sent successfully to {user_id}")
+        else:
+            logger.error(f"Failed to send PDF: {response.status_code} - {response.text}")
 
     except Exception as e:
         logger.error(f'Error sending PDF: {e}', exc_info=True)
