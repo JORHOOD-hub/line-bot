@@ -1,8 +1,11 @@
 import zipfile
 import re
 import shutil
+import logging
 from pathlib import Path
 from typing import Dict, Any
+
+logger = logging.getLogger(__name__)
 
 class ExcelWriter:
     """Excelテンプレートに値を書き込み（ZIP操作方式・Cowork実装統合）
@@ -30,6 +33,7 @@ class ExcelWriter:
             'valid_year': 2026, 'valid_month': 5, 'valid_day': 31,  # 有効期間
         }
         """
+        logger.info(f"DEBUG write_data received data: {data}")
         try:
             shutil.copy(self.template_path, self.output_path)
 
@@ -88,7 +92,7 @@ class ExcelWriter:
             return True
 
         except Exception as e:
-            print(f"Error writing Excel: {e}")
+            logger.error(f"Error writing Excel: {e}", exc_info=True)
             return False
 
     @staticmethod

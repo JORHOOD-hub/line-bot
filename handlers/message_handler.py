@@ -207,6 +207,9 @@ def generate_certificate_pdf(user_id: str) -> Optional[str]:
         user_state = state_manager.get_state(user_id)
         property_data = user_state.property_data
 
+        # DEBUG: property_data の内容をログ出力
+        logger.info(f"DEBUG property_data: {property_data}")
+
         # created_date を datetime に変換
         from dateutil import parser
         created_date = property_data.get('created_date', datetime.now())
@@ -226,6 +229,9 @@ def generate_certificate_pdf(user_id: str) -> Optional[str]:
             'deposit': property_data.get('down_payment', config.DEFAULT_DOWN_PAYMENT),
             'remarks': property_data.get('remarks', ''),  # 備考
         }
+
+        # DEBUG: generate_data の内容をログ出力
+        logger.info(f"DEBUG generate_data: {generate_data}")
 
         # 有効期間を追加
         if property_data.get('expiration_date'):
@@ -250,6 +256,7 @@ def generate_certificate_pdf(user_id: str) -> Optional[str]:
 
         # Step 1: Excel 書き込み
         logger.info(f"Step 1: Writing Excel for user {user_id}")
+        logger.info(f"DEBUG: write_data に渡す data: {generate_data}")
         writer = ExcelWriter(config.EXCEL_TEMPLATE_PATH, str(xlsm_path))
         if not writer.write_data(generate_data):
             raise Exception("Excel書き込みに失敗しました")
