@@ -63,6 +63,10 @@ class PDFExtractor:
         match = re.search(r'物\s*件\s*名[：:]?\s*([^\n]+)', text)
         if match:
             name = match.group(1).strip()
+            # 「管理ID」「ID」などが含まれていれば、その前までを抽出
+            if any(kw in name for kw in ['管理ID', 'ID ', '管理']):
+                # 「管理ID」の前までを取得
+                name = re.sub(r'\s*(?:管理ID|ID|管理).*$', '', name).strip()
             if name and name != '':
                 return name
 
@@ -82,21 +86,45 @@ class PDFExtractor:
 
     def _extract_location(self, text: str) -> Optional[str]:
         """所在地を抽出"""
-        # 「所在地」の後の文字列を抽出（スペースに対応）
+        # パターン1: 「住居表示」「住所」を優先（これらには都道府県情報が含まれる）
+        for label in ['住\s*居\s*表\s*示', '住\s*所']:
+            match = re.search(rf'{label}[：:]?\s*(.+?)(?:\n|$)', text)
+            if match:
+                location = match.group(1).strip()
+                # 都道府県や市区町村の文字が含まれているか確認
+                if self._is_valid_location(location):
+                    return location
+
+        # パターン2: 「所在地」の後の文字列を抽出（ただし、右側が「外観」などでないこと）
         match = re.search(r'所\s*在\s*地[：:]?\s*(.+?)(?:\n|$)', text)
         if match:
             location = match.group(1).strip()
             # 最初の「地 」「在地 」を削除
             location = re.sub(r'^[地在地]+\s*', '', location).strip()
-            if location:
-                return location
+            # 「外観」「画像」などの非地住所情報ではないことを確認
+            if location and not any(kw in location for kw in ['外観', '画像', '写真']):
+                if self._is_valid_location(location):
+                    return location
         return None
+
+    def _is_valid_location(self, location: str) -> bool:
+        """所在地として有効か（都道府県や市区町村を含むか）確認"""
+        # 都道府県リスト（簡略版）
+        prefectures = ['北海道', '青森', '岩手', '宮城', '秋田', '山形', '福島',
+                      '茨城', '栃木', '群馬', '埼玉', '千葉', '東京', '神奈川',
+                      '新潟', '富山', '石川', '福井', '山梨', '長野', '岐阜',
+                      '静岡', '愛知', '三重', '滋賀', '京都', '大阪', '兵庫',
+                      '奈良', '和歌山', '鳥取', '島根', '岡山', '広島', '山口',
+                      '徳島', '香川', '愛媛', '高知', '福岡', '佐賀', '長崎',
+                      '熊本', '大分', '宮崎', '鹿児島', '沖縄']
+        return any(pref in location for pref in prefectures)
 
     def _extract_land_area(self, text: str) -> Optional[float]:
         """土地面積を抽出"""
         patterns = [
             r'土\s*地\s*面\s*積[：:]?\s*([\d.]+)',
-            r'地\s*積[：:]?\s*([\d.]+)',
+            # 「地積(公簿)」「地積 」のパターン（括弧に対応）
+            r'地\s*積\s*(?:\([^)]*\))?\s*[：:]?\s*([\d.]+)',
             r'売\s*却\s*希\s*望\s*面\s*積[：:]?\s*([\d.]+)',
             # 「面積 283.67㎡」というフォーマット（行の最初の「面積」のみ）
             # 「延床面積」「1階面積」などは除外
@@ -130,18 +158,19 @@ class PDFExtractor:
 
     def _extract_purchase_price(self, text: str) -> Optional[int]:
         """購入価格を抽出"""
-        # パターン1: 「購入価格 3,800万円」
-        match = re.search(r'購\s*入\s*価格[：:]?\s*([\d,]+)\s*万?\s*円', text)
-        if match:
-            try:
-                price_str = match.group(1).replace(',', '')
-                price = int(price_str)
-                # もし万円単位なら × 10000
-                if '万' in text[match.start():match.end()]:
-                    price *= 10000
-                return price
-            except ValueError:
-                pass
+        # パターン1: 「購入価格」「物件価格」「売却価格」などのラベル
+        for label in ['購\s*入\s*価格', '物\s*件\s*価格', '売\s*却\s*価格', '価\s*格']:
+            match = re.search(rf'{label}[：:]?\s*([\d,]+)\s*万?\s*円?', text)
+            if match:
+                try:
+                    price_str = match.group(1).replace(',', '')
+                    price = int(price_str)
+                    # もし万円単位なら × 10000
+                    if '万' in text[match.start():match.end()]:
+                        price *= 10000
+                    return price
+                except ValueError:
+                    pass
 
         # パターン2: 「価 格」の直前の数値を探す（改行対応）
         # 「3,800万円\n価 格」というフォーマット
