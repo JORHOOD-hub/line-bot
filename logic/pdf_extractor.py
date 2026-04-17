@@ -1,6 +1,9 @@
 import pdfplumber
 import re
+import logging
 from typing import Dict, Optional
+
+logger = logging.getLogger(__name__)
 
 class PDFExtractor:
     """物件概要書 PDF から物件情報を抽出"""
@@ -36,8 +39,8 @@ class PDFExtractor:
                     text += page.extract_text() or ""
 
                 # デバッグ：抽出されたテキストをログ出力
-                print(f"DEBUG: Extracted text length: {len(text)} characters")
-                print(f"DEBUG: First 500 chars: {text[:500]}")
+                logger.info(f"DEBUG: Extracted text length: {len(text)} characters")
+                logger.info(f"DEBUG: First 500 chars: {text[:500]}")
 
                 # 物件名、所在地などを抽出
                 extracted_data['property_name'] = self._extract_property_name(text)
@@ -46,8 +49,11 @@ class PDFExtractor:
                 extracted_data['building_area'] = self._extract_building_area(text)
                 extracted_data['purchase_price'] = self._extract_purchase_price(text)
 
+                # 抽出結果をログ出力
+                logger.info(f"EXTRACTION RESULT: {extracted_data}")
+
         except Exception as e:
-            print(f"Error extracting PDF: {e}")
+            logger.error(f"Error extracting PDF: {e}", exc_info=True)
 
         return extracted_data
 
