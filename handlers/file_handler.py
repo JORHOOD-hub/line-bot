@@ -4,9 +4,12 @@ PDFファイル受信・処理ハンドラー
 """
 
 import os
+import logging
 from pathlib import Path
 from logic.conversation_state import state_manager
 from logic.pdf_extractor import PDFExtractor
+
+logger = logging.getLogger(__name__)
 
 def handle_pdf_file(user_id: str, pdf_path: str) -> str:
     """
@@ -22,15 +25,20 @@ def handle_pdf_file(user_id: str, pdf_path: str) -> str:
         extractor = PDFExtractor(pdf_path)
         extracted_data = extractor.extract_data()
 
+        logger.info(f"DEBUG file_handler: extracted_data = {extracted_data}")
+
         # 抽出したデータを状態に保存（update_property_data は内部で get_state を呼ぶため、古い state を上書きしないように注意）
         for key, value in extracted_data.items():
             if value is not None:
+                logger.info(f"DEBUG file_handler: Updating {key} = {value}")
                 state_manager.update_property_data(user_id, key, value)
 
         # 状態を「購入価格入力待ち」に変更（最新の state を取得）
         user_state = state_manager.get_state(user_id)
+        logger.info(f"DEBUG file_handler: user_state after updates = {user_state.property_data}")
         user_state.state = 'waiting_price'
         state_manager.set_state(user_state)
+        logger.info(f"DEBUG file_handler: Final state saved, state={user_state.state}")
 
         # 抽出結果を表示
         result_msg = f"""

@@ -127,14 +127,6 @@ class PDFExtractor:
                 except ValueError:
                     pass
         return None
-        for pattern in patterns:
-            match = re.search(pattern, text)
-            if match:
-                try:
-                    return float(match.group(1))
-                except ValueError:
-                    pass
-        return None
 
     def _extract_purchase_price(self, text: str) -> Optional[int]:
         """購入価格を抽出"""
