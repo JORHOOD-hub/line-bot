@@ -76,26 +76,30 @@ class PDFExtractor:
             if name and name != '':
                 return name
 
-        # パターン2: 最初の行に物件名がある（コルデソル下関対策）
-        # 「空室・居住中・賃貸中」などの情報行をスキップして、次の日本語行を物件名と判定
-        lines = text.split('\n')
-        for i, line in enumerate(lines[:5]):  # 最初の5行をチェック
-            line = line.strip()
-            # 建物種別情報や記号が含まれない、純粋な日本語行
-            if line and not any(kw in line for kw in ['空室', '居住', '賃貸', '【', '【間', '消費税', '価格']):
-                # ヒラガナ、カタカナ、漢字を含むかチェック
-                if re.search(r'[ぁ-ん]|[ァ-ヴー]|[一-龯]', line):
-                    # 数字が多く含まれていない、かつ建物種別や括弧を含まない
-                    if not re.search(r'[\d,]{3,}|マンション|ビル|アパート|戸建|（|）|【|】', line):
-                        return line
+        # パターン2: 「物件種別」直後の単独行に物件名（寿マンション対策）
+        # 物件種別の直後に建物名だけの行がある場合を検出
+        # 単純な名前（2-20文字、日本語/カナ）で、価格・面積など数値情報を含まない
+        match = re.search(r'物\s*件\s*種別[^\n]*?\n+([^\n]+)\n', text)
+        if match:
+            name = match.group(1).strip()
+            # 価格情報を含まない（万円、円など）
+            if not any(kw in name for kw in ['万円', '円', '万', '間取', '面積', '地番', '地目', '権利', '延床', '築年']):
+                # 数字が大量に含まれていない（価格の可能性を除外）
+                digit_count = sum(1 for c in name if c.isdigit())
+                if digit_count < len(name) * 0.3:  # 30%未満の数字
+                    # 建物種別説明ではなく、単純な物件名か確認（中古や新築が含まれていない）
+                    if not re.search(r'中古|新築|築|一棟|棟', name):
+                        if 2 < len(name) < 25:
+                            return name
 
         # パターン3: 建物種別の直前の行にある物件名を検出
         # 「延床面積」「寿マンション」などの流れを想定
+        lines = text.split('\n')
         for i, line in enumerate(lines):
-            # 「マンション」「ビル」などが含まれる行
+            # 「マンション」「ビル」などが含まれる行で、建物名として適切か確認
             if any(kw in line for kw in ['マンション', 'ビル', 'アパート', '戸建', '住宅']):
-                # 建物種別の行（「中古（1棟）マンション」など）ではない
-                if not re.search(r'中古|新築|築', line):
+                # 建物種別の説明行（「中古（1棟）マンション」「新築マンション」など）ではない
+                if not re.search(r'中古|新築|築|一棟|棟', line):
                     name = line.strip()
                     if name and 1 < len(name) < 50 and not any(c.isdigit() for c in name[:3]):
                         return name
@@ -104,48 +108,73 @@ class PDFExtractor:
 
     def _extract_location(self, text: str) -> Optional[str]:
         """所在地を抽出"""
-        # パターン1: 「住居」の直後に住所がある場合（朋竹ハイツ対策）
+        # パターン1: 「所在地」直後（同じ行または次行）
+        # 寿マンション対策：「所在地 アドレス」形式（スペース区切り）
+        match = re.search(r'所\s*在地\s+([^\n]+)(?:\n|$)', text)
+        if match:
+            location = match.group(1).strip()
+            if self._is_valid_location(location):
+                return location
+
+        # パターン2: 「住居表示」を優先（複数行対応）
+        match = re.search(r'住\s*居\s*表\s*示[：:]?\s*(.+?)(?:\n|$)', text)
+        if match:
+            location = match.group(1).strip()
+            if self._is_valid_location(location):
+                return location
+
+        # パターン3: 「住所」ラベル
+        match = re.search(r'住\s*所[：:]?\s*(.+?)(?:\n|$)', text)
+        if match:
+            location = match.group(1).strip()
+            if self._is_valid_location(location):
+                return location
+
+        # パターン4: 「住居」の直後に住所（朋竹ハイツ対策）
         # 「住居」と次のラベル（「権」「地目」）の間の住所を抽出
+        # ただし、「住居」が用途（住居、店舗など）を示す場合は除外する必要があるため、都道府県検証が必須
         match = re.search(r'住\s*居\s+(.+?)\s+(?:権|地目|構造|交通)', text)
         if match:
             location = match.group(1).strip()
             if self._is_valid_location(location):
                 return location
 
-        # パターン2: 「住居表示」「住所」を優先（これらには都道府県情報が含まれる）
-        for label in ['住\s*居\s*表\s*示', '住\s*所']:
-            match = re.search(rf'{label}[：:]?\s*(.+?)(?:\n|$)', text)
-            if match:
-                location = match.group(1).strip()
-                # 都道府県や市区町村の文字が含まれているか確認
-                if self._is_valid_location(location):
-                    return location
+        # パターン5: 「所在地」直後の複数行から住所を抽出
+        # 複数行対応：「所在地」直後の複数行から有効な住所を検出
+        match = re.search(r'所\s*在地[^\n]*?\n+(.+?)(?:\n交通|\n近鉄|\n駅|\n〒|\n|$)', text, re.DOTALL)
+        if match:
+            location_block = match.group(1).strip()
+            # 複数行の場合、各行を検証
+            lines = location_block.split('\n')
 
-        # パターン3: 「所在」「所在地」の後の複数行から住居表示を優先
-        # コルデソル下関対策：地番と住居表示が複数行ある場合、住居表示を採用
-        for label in ['所\s*在[^\n]*?', '所\s*在\s*地']:
-            match = re.search(rf'{label}[：:]?\s*(.+?)(?:地目|権利|交通|建築|〒|$)', text, re.DOTALL)
-            if match:
-                location_block = match.group(1).strip()
-                # 複数行の場合、「(住居表示：」を含む行を探す
-                lines = location_block.split('\n')
+            # 最初に有効な行を優先
+            for line in lines:
+                loc = line.strip()
+                if loc and self._is_valid_location(loc):
+                    return loc
 
-                # 住居表示を含む行を優先
-                for line in lines:
-                    if '住居表示' in line or '(' in line:
-                        loc = line.strip()
-                        if self._is_valid_location(loc):
-                            return loc
+        # パターン6: コルデソル下関対策：地番と住居表示が複数行ある場合
+        match = re.search(r'所\s*在[^\n]*?[：:]?\s*(.+?)(?:地目|権利|交通|建築|〒|$)', text, re.DOTALL)
+        if match:
+            location_block = match.group(1).strip()
+            lines = location_block.split('\n')
 
-                # 住居表示がない場合、最後の行（住居表示）を試す
-                if lines:
-                    loc = lines[-1].strip() if len(lines) > 1 else lines[0].strip()
-                    # 最初の「地 」「在地 」を削除
-                    loc = re.sub(r'^[地在地]+\s*', '', loc).strip()
-                    # 「外観」「画像」などの非地住所情報ではないことを確認
-                    if loc and not any(kw in loc for kw in ['外観', '画像', '写真']):
-                        if self._is_valid_location(loc):
-                            return loc
+            # 住居表示を含む行を優先
+            for line in lines:
+                if '住居表示' in line or '(' in line:
+                    loc = line.strip()
+                    if self._is_valid_location(loc):
+                        return loc
+
+            # 住居表示がない場合、最後の行を試す
+            if lines:
+                loc = lines[-1].strip() if len(lines) > 1 else lines[0].strip()
+                # 最初の「地 」「在地 」を削除
+                loc = re.sub(r'^[地在地]+\s*', '', loc).strip()
+                # 「外観」「画像」などの非地住所情報ではないことを確認
+                if loc and not any(kw in loc for kw in ['外観', '画像', '写真']):
+                    if self._is_valid_location(loc):
+                        return loc
 
         return None
 
