@@ -211,9 +211,9 @@ def handle_waiting_expiration(user_id: str, text: str) -> str:
 
 def generate_certificate_pdf(user_id: str) -> Optional[str]:
     """
-    買付証明書PDFを生成・保存
+    買付証明書PDFを生成・保存し、画像に変換
 
-    返り値: 生成されたPDFファイルパス（成功時）/ None（失敗時）
+    返り値: 生成された画像ファイルパス（成功時）/ None（失敗時）
     """
     try:
         user_state = state_manager.get_state(user_id)
@@ -281,9 +281,17 @@ def generate_certificate_pdf(user_id: str) -> Optional[str]:
             raise Exception("PDF生成に失敗しました")
         logger.info(f"Step 2: PDF generated successfully")
 
-        # Step 3: ユーザー状態を更新
+        # Step 3: PDFを画像に変換
+        logger.info(f"Step 3: Converting PDF to image for user {user_id}")
+        image_path = generator.convert_pdf_to_image()
+        if not image_path:
+            raise Exception("PDF画像変換に失敗しました")
+        logger.info(f"Step 3: PDF converted to image successfully: {image_path}")
+
+        # Step 4: ユーザー状態を更新
         user_state.state = 'completed'
         user_state.property_data['output_pdf_path'] = str(pdf_path)
+        user_state.property_data['output_image_path'] = image_path
         state_manager.set_state(user_state)
 
         # 一時ファイル（XLSM）を削除
@@ -293,7 +301,8 @@ def generate_certificate_pdf(user_id: str) -> Optional[str]:
             except:
                 pass
 
-        return str(pdf_path)
+        # 画像パスを返す（LINE送信用）
+        return image_path
 
     except Exception as e:
         logger.error(f"Error generating certificate: {e}", exc_info=True)

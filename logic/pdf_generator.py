@@ -242,6 +242,36 @@ class PDFGenerator:
             logger.error(f"Error overlaying seal: {e}", exc_info=True)
             return False
 
+    def convert_pdf_to_image(self) -> Optional[str]:
+        """
+        生成されたPDFをA4サイズの画像に変換
+        返り値: 画像ファイルパス（成功時）/ None（失敗時）
+        """
+        try:
+            from pdf2image import convert_from_path
+
+            if not self.output_path.exists():
+                logger.error(f"PDF file not found: {self.output_path}")
+                return None
+
+            # PDFを画像に変換（150 dpi で十分）
+            images = convert_from_path(str(self.output_path), dpi=150, first_page=1, last_page=1)
+
+            if not images:
+                logger.error("Failed to convert PDF to image")
+                return None
+
+            # 画像をJPEGで保存（LINEの送信に最適）
+            image_path = str(self.output_path).replace('.pdf', '.jpg')
+            images[0].save(image_path, 'JPEG', quality=95)
+
+            logger.info(f"PDF converted to image: {image_path}")
+            return image_path
+
+        except Exception as e:
+            logger.error(f"Error converting PDF to image: {e}", exc_info=True)
+            return None
+
     def cleanup(self):
         """一時ファイルをクリーンアップ"""
         try:

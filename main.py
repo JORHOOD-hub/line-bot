@@ -7,7 +7,7 @@ from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import (
     MessageEvent, TextMessage, TextSendMessage, FileMessage,
-    TemplateSendMessage, ButtonsTemplate, URIAction
+    TemplateSendMessage, ButtonsTemplate, URIAction, ImageSendMessage
 )
 import tempfile
 from pathlib import Path
@@ -137,47 +137,60 @@ def get_pdf(user_id):
         return {'error': 'Failed to send PDF'}, 500
 
 
-def send_pdf_to_user(user_id: str, pdf_path: str):
+@app.route('/image/<user_id>', methods=['GET'])
+def get_image(user_id):
+    """生成した買付証明書の画像をダウンロード"""
+    output_dir = Path(config.OUTPUT_DIR)
+    image_path = output_dir / f"{user_id}_certificate.jpg"
+
+    if not image_path.exists():
+        logger.warning(f"Image not found for user {user_id}: {image_path}")
+        return {'error': 'Image not found'}, 404
+
+    try:
+        logger.info(f"Sending image to {user_id}: {image_path}")
+        return send_file(
+            str(image_path),
+            mimetype='image/jpeg',
+            as_attachment=False
+        )
+    except Exception as e:
+        logger.error(f"Error sending image: {e}", exc_info=True)
+        return {'error': 'Failed to send image'}, 500
+
+
+def send_pdf_to_user(user_id: str, image_path: str):
     """
-    生成したPDFをLINEユーザーに送信
-    ボタンテンプレートメッセージで「ダウンロード」ボタンを表示
+    生成した買付証明書の画像をLINEユーザーに送信
+    PDFをA4サイズの画像に変換して直接LINEに送信
     """
     try:
-        pdf_path = Path(pdf_path)
-        if not pdf_path.exists():
-            logger.warning(f"PDF file not found: {pdf_path}")
+        image_file = Path(image_path)
+        if not image_file.exists():
+            logger.warning(f"Image file not found: {image_path}")
             return
 
-        logger.info(f"PDF ready for {user_id}: {pdf_path}")
+        logger.info(f"Image ready for {user_id}: {image_path}")
 
-        # ダウンロードリンクを生成
+        # 画像をアップロードしてURLを取得（またはローカルパスを使用）
         base_url = os.getenv('BASE_URL', 'https://line-bot-production-2689.up.railway.app')
-        download_url = f"{base_url}/pdf/{user_id}"
 
-        logger.info(f"Sending PDF button template to {user_id}: {download_url}")
+        # 画像URLを生成（/imageエンドポイント経由でアクセス可能にする）
+        image_url = f"{base_url}/image/{user_id}"
 
-        # ボタンテンプレートメッセージを作成
-        buttons_template = ButtonsTemplate(
-            title='買付証明書',
-            text='✅ 完成しました！\n\n以下からダウンロードしてください。',
-            actions=[
-                URIAction(
-                    label='📥 ダウンロード',
-                    uri=download_url
-                )
-            ]
-        )
+        logger.info(f"Sending image to {user_id}: {image_url}")
 
-        message = TemplateSendMessage(
-            alt_text='買付証明書が完成しました',
-            template=buttons_template
+        # 画像メッセージを作成
+        message = ImageSendMessage(
+            original_content_url=image_url,
+            preview_image_url=image_url
         )
 
         line_bot_api.push_message(user_id, message)
-        logger.info(f"PDF button template sent successfully to {user_id}")
+        logger.info(f"Image sent successfully to {user_id}")
 
     except Exception as e:
-        logger.error(f'Error sending PDF: {e}', exc_info=True)
+        logger.error(f'Error sending image: {e}', exc_info=True)
 
 
 @app.errorhandler(400)
