@@ -92,7 +92,15 @@ class PDFExtractor:
 
     def _extract_location(self, text: str) -> Optional[str]:
         """所在地を抽出"""
-        # パターン1: 「住居表示」「住所」を優先（これらには都道府県情報が含まれる）
+        # パターン1: 「住居」の直後に住所がある場合（朋竹ハイツ対策）
+        # 「住居」と次のラベル（「権」「地目」）の間の住所を抽出
+        match = re.search(r'住\s*居\s+(.+?)\s+(?:権|地目|構造|交通)', text)
+        if match:
+            location = match.group(1).strip()
+            if self._is_valid_location(location):
+                return location
+
+        # パターン2: 「住居表示」「住所」を優先（これらには都道府県情報が含まれる）
         for label in ['住\s*居\s*表\s*示', '住\s*所']:
             match = re.search(rf'{label}[：:]?\s*(.+?)(?:\n|$)', text)
             if match:
@@ -101,7 +109,7 @@ class PDFExtractor:
                 if self._is_valid_location(location):
                     return location
 
-        # パターン2: 「所在地」の後の文字列を抽出（ただし、右側が「外観」などでないこと）
+        # パターン3: 「所在地」の後の文字列を抽出（ただし、右側が「外観」などでないこと）
         match = re.search(r'所\s*在\s*地[：:]?\s*(.+?)(?:\n|$)', text)
         if match:
             location = match.group(1).strip()
